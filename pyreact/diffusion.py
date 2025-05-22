@@ -72,11 +72,14 @@ class Diffusionsolver:
         if usefloat64:
             set_global_precision(64)
 
-    def run(self, dataloader, dt, iterations, batch_to_process=None, folder=None, keep_results=False):
+    def run(self, dataloader, dt, iterations, batch_to_process=None, folder=None, keep_results=False, implicit=None):
 
         self.results = []
         if folder is not None:
             os.makedirs(folder, exist_ok=True)
+
+        if implicit is not None:
+            self.implicit = implicit
 
         idx = 0
 
