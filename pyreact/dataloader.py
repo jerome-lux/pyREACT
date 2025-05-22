@@ -1,5 +1,4 @@
 import numpy as np
-import os
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
@@ -50,5 +49,3 @@ class DefaultDataset(Dataset):
                 raise
 
         return array
-
-

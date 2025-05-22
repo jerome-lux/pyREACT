@@ -1,12 +1,13 @@
+import typing
 import numpy as np
 import os
 import torch
-from phiml.backend import set_global_default_backend, set_global_precision
+from phiml.backend import set_global_precision
 import phi.flow as flow
-import numpy as np
 from tqdm import trange
 
-def diffusivty_model(porosity, d0=1, exponent=1.5):
+
+def diffusivity_model(porosity, d0: float = 1, exponent: float = 1.5):
     """
     Map porosity values to diffusion coefficients using a power-law relationship.
 
@@ -74,7 +75,11 @@ class Diffusionsolver:
     def run(self, dataloader, dt, iterations, batch_to_process=None, folder=None, keep_results=False):
 
         self.results = []
+        if folder is not None:
+            os.makedirs(folder, exist_ok=True)
+
         idx = 0
+
         for i, inputs in enumerate(dataloader):
             if i == batch_to_process:
                 break
@@ -86,7 +91,7 @@ class Diffusionsolver:
                 c0 = torch.zeros_like(dfield)
 
             batch_size = flow.batch(id=dfield.shape[0])
-            nx, ny = inputs.shape[1:]
+            nx, ny = dfield.shape[1:]
             domain = flow.Box(x=nx * self.h, y=ny * self.h)
             dfield = flow.wrap(dfield.to(self.device), batch_size, flow.spatial("x,y"))
             diffusivity_grid = flow.CenteredGrid(dfield, bounds=domain, extrapolation=flow.extrapolation.PERIODIC)
@@ -102,9 +107,12 @@ class Diffusionsolver:
             )
 
             if folder is not None:
-                for b in c_evol.shape.get_size("id")
-                    np.save(os.path.join(folder, f"_{idx:04d}.npy"), c_evol.id[b])
+                for b in range(c_evol.shape.get_size("id")):
+                    np.save(os.path.join(folder, f"c_evol_{idx:04d}.npy"), c_evol.id[b])
                     idx += 1
 
             if keep_results:
                 self.results.append(c_evol)
+
+        if keep_results:
+            self.results = flow.concat(self.results, flow.batch("id"))

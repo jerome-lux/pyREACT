@@ -7,9 +7,7 @@ import time
 from pathlib import Path
 
 
-def generate_one_sample(
-    it, model, grid_pos, min_ls, max_ls, base_var, min_p, max_p, folder=os.getcwd(), trunc=3, exponent=1.5
-):
+def generate_one_sample(it, model, grid_pos, min_ls, max_ls, base_var, min_p, max_p, folder=os.getcwd(), trunc=3):
     """
     Generate a single random field with a random length scale between min_ls and max_ls and variance.
     A porosity field is the generated. The random field is truncated at trunc*sigma, and mapped to the range [min_p, max_p]
@@ -17,9 +15,9 @@ def generate_one_sample(
     """
     # Generate the GRF
     idx, rng = it
+    current_len_scale = rng.uniform(min_ls, max_ls)
     srf = gs.SRF(model)
     srf.set_pos(grid_pos, "structured")
-    current_len_scale = rng.uniform(min_ls, max_ls)
     srf.model.len_scale = current_len_scale
     srf.model.var = base_var
     srf(seed=rng.integers(0, 1000000))
@@ -28,15 +26,11 @@ def generate_one_sample(
     # Map to porosity
     sigma = np.sqrt(base_var)
     porosity = np.clip(field, -trunc * sigma, trunc * sigma)
-    porosity = (porosity + trunc * sigma) / (2 * trunc * sigma) * (max_p - min_p) + min_p
+    porosity = ((porosity + trunc * sigma) / (2 * trunc * sigma)) * (max_p - min_p) + min_p
 
-    # Map to relative diffusivity
-    # D/D0 = porosity^exponent
-    rel_diffusivity = porosity**exponent
-
-    # save fields - folder must exist
-    np.save(os.path.join(folder, "GRF", f"GRF_{idx:03d}.npy"), field)
-    np.save(os.path.join(folder, "PORO", f"porosity_{idx:03d}.npy"), rel_diffusivity)
+    # save fields
+    np.save(os.path.join(folder, "GRF", f"GRF_{idx:04d}.npy"), field)
+    np.save(os.path.join(folder, "PORO", f"porosity_{idx:04d}.npy"), porosity)
 
 
 def generate_fields(
@@ -46,10 +40,10 @@ def generate_fields(
     porosity_std,
     min_ls,
     max_ls,
+    model=gs.Gaussian(dim=2),
     base_var=1,
     folder=os.getcwd(),
     trunc=3,
-    exponent=1.5,
 ):
     """
     Generate random fields with a random length scale between min_ls and max_ls and variance.
@@ -75,10 +69,9 @@ def generate_fields(
     max_p = porosity_avg + trunc * porosity_std
 
     assert min_p > 0, "minimum porosity must be > 0, change the truncation factor"
-    print(f"Creating {n_samples} fields with min_p: {min_p}, max_p: {max_p}")
+    print(f"Creating {n_samples} fields with min_p: {min_p:4.2f}, max_p: {max_p:4.2f}")
 
     # Generate a list of random fields
-    model = gs.Exponential(dim=2)
     it = [(i, np.random.default_rng(i)) for i in range(n_samples)]
     func = partial(
         generate_one_sample,
@@ -91,11 +84,10 @@ def generate_fields(
         max_p=max_p,
         folder=folder,
         trunc=trunc,
-        exponent=exponent,
     )
     t0 = time.time()
     # Use multiprocessing to generate the fields
-    with Pool(cpu_count()) as pool:
+    with Pool(cpu_count() - 1) as pool:
         pool.map(func, it)
     t1 = time.time()
     print(f"Generated {n_samples} fields in {t1-t0:.2f} seconds, {n_samples/(t1-t0):.2f} fields/s")
