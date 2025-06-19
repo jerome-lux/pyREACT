@@ -406,10 +406,10 @@ class simpleDRsolver:
             # TO Store the evolution of concentration field & porosity over time
             c_evol = [flow.stack([c.values for c in c_field], dim=flow.channel("species"))]
             p_evol = [porosity]
-            self.history.append({"iteration": it + 1})
+            self.history.append({"iteration": 0})
             if not explicit:
-                self.history[-1]["substeps"] = it + 1
-            dt = self.history[-1]["dt"]
+                self.history[-1]["substeps"] = 0
+            self.history[-1]["dt"] = 0
 
             progress_bar = trange(iterations)
             t = 0
@@ -446,11 +446,11 @@ class simpleDRsolver:
                 for b in range(c_evol.shape.get_size("id")):
                     np.save(
                         os.path.join(folder, "c_fields", f"c_evol_{idx:04d}.npy"),
-                        c_evol.id[b].numpy(("x", "y", "time", "species")),
+                        c_evol.id[b].numpy(("time", "x", "y", "species")),
                     )
                     np.save(
                         os.path.join(folder, "p_fields", f"p_evol_{idx:04d}.npy"),
-                        p_evol.id[b].numpy(("x", "y", "time")),
+                        p_evol.id[b].numpy(("time", "x", "y")),
                     )
                     idx += 1
 
