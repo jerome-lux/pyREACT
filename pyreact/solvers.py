@@ -4,6 +4,7 @@ from functools import partial
 import os
 import torch
 from phiml.backend import set_global_precision
+from phiml.math import jit_compile_linear
 import phi.flow as flow
 from tqdm import trange
 from .models import diffusivity_model
@@ -123,7 +124,7 @@ class simpleDRsolver:
         stoech_coeffs,
         d_model=diffusivity_model,
         solver=flow.Solve("CG"),
-        max_substeps=5,
+        max_substeps=10,
         substeps_tol=1e-6,
         max_porosity_delta=1e-3,
         device=None,
@@ -151,7 +152,6 @@ class simpleDRsolver:
             c_tol (float, optional): Tolerance for concentration convergence. Defaults to 1e-6.
             device (str or None, optional): Device to run the computation on ("cpu" or "cuda:0"). If None, automatically selects GPU if available.
             usefloat64 (bool, optional): Whether to use 64-bit floating point precision. Defaults to True.
-
         """
 
         self.bc = bc
@@ -218,7 +218,7 @@ class simpleDRsolver:
         diffusivity = self.update_diffusivity(porosity)
 
         max_rate = np.max([flow.math.max((1 - porosity) * s * flow.math.abs(R)).numpy() for s in self.stoech_coeffs])
-        dt = 0.1 * self.h**2 / np.max([flow.math.max(d) for d in diffusivity])
+        dt = 0.2 * self.h**2 / np.max([flow.math.max(d) for d in diffusivity])
         if max_rate > 0:
             dt = min(dt, self.max_porosity_delta / max_rate)
         c_new = [c for c in c_field]
@@ -404,15 +404,19 @@ class simpleDRsolver:
             avg_c = np.array([flow.math.mean(c.values).numpy() for c in c_field])
 
             # TO Store the evolution of concentration field & porosity over time
-            c_evol = []
-            p_evol = []
+            c_evol = [flow.stack([c.values for c in c_field], dim=flow.channel("species"))]
+            p_evol = [porosity]
+            self.history.append({"iteration": it + 1})
+            if not explicit:
+                self.history[-1]["substeps"] = it + 1
+            dt = self.history[-1]["dt"]
 
             progress_bar = trange(iterations)
             t = 0
             step = (
-                partial(self.explicit_step, method=method)
+                partial(self.explicit_step)
                 if explicit
-                else partial(self.implicit_step, substeps=self.max_substeps)
+                else partial(self.implicit_step, substeps=self.max_substeps, method=method)
             )
 
             for it in progress_bar:
